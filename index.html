@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>쿠폰 번호 관리 (Google Sheets 연동)</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover-color: #0056b3;
+            --success-bg: #d4edda;
+            --success-color: #155724;
+            --danger-bg: #f8d7da;
+            --danger-color: #721c24;
+            --light-gray: #f4f4f9;
+            --dark-gray: #6c757d;
+            --white: #ffffff;
+            --border-color: #ddd;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: var(--light-gray);
+            padding: 20px 0;
+        }
+        .container {
+            width: 95%;
+            max-width: 600px;
+            padding: 25px;
+            background-color: var(--white);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 25px;
+            color: #333;
+        }
+
+        /* Input and Buttons */
+        input[type="tel"] {
+            width: 100%;
+            padding: 18px;
+            font-size: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 15px;
+        }
+        .btn {
+            width: 100%;
+            padding: 18px;
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--white);
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            position: relative;
+        }
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 4px solid #fff;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .btn:active {
+            background-color: var(--primary-hover-color);
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:active {
+            background-color: #5a6268;
+        }
+
+        /* Result/Feedback messages */
+        #result, #feedback {
+            margin-top: 20px;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 12px;
+            min-height: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 1.4;
+            word-break: keep-all;
+        }
+        .found { background-color: var(--success-bg); color: var(--success-color); }
+        .not-found { background-color: var(--danger-bg); color: var(--danger-color); }
+        .placeholder { color: var(--dark-gray); }
+        #feedback {
+            font-size: 18px;
+            min-height: 50px;
+            margin-bottom: 20px;
+        }
+
+        /* Management Section */
+        .management-section {
+            margin-top: 30px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+        .management-section summary {
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 10px;
+            transition: background-color 0.2s;
+            color: #444;
+        }
+        .management-section summary:hover {
+            background-color: #f0f0f0;
+        }
+        .management-content {
+            padding-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Coupon List */
+        #couponListContainer {
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: left;
+        }
+        #couponList ul {
+            list-style: none;
+        }
+        #couponList li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 20px;
+            padding: 12px 5px;
+            border-bottom: 1px solid #eee;
+        }
+        #couponList li:last-child {
+            border-bottom: none;
+        }
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>쿠폰 번호 관리</h1>
+        <input type="tel" id="searchInput" placeholder="검색할 숫자 입력" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+        <button id="searchButton" class="btn">검색</button>
+        <div id="result" class="placeholder">검색할 번호를 입력해주세요.</div>
+
+        <details class="management-section">
+            <summary>≡ 쿠폰 관리</summary>
+            <div class="management-content">
+                <input type="tel" id="addInput" placeholder="추가할 숫자 입력" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                <button id="addButton" class="btn">추가</button>
+                <div id="feedback"></div>
+                <button id="toggleListButton" class="btn btn-secondary">전체 목록 보기</button>
+                <div id="couponListContainer" style="display:none;">
+                    <div id="couponList"></div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <script>
+        const App = {
+            // Netlify Functions 프록시 엔드포인트
+            // (netlify/functions/coupons.js 가 배포되어 있어야 합니다)
+            googleWebAppUrl: "/.netlify/functions/coupons",
+
+            coupons: [],
+
+            nodes: {
+                searchInput: document.getElementById("searchInput"),
+                resultDiv: document.getElementById("result"),
+                addInput: document.getElementById("addInput"),
+                addButton: document.getElementById("addButton"),
+                feedbackDiv: document.getElementById("feedback"),
+                couponListContainer: document.getElementById("couponListContainer"),
+                couponList: document.getElementById("couponList"),
+                toggleListButton: document.getElementById("toggleListButton")
+            },
+
+            async init() {
+                this.bindEvents();
+                await this.loadCoupons();
+            },
+
+            bindEvents() {
+                document.getElementById("searchButton").addEventListener("click", () => this.searchCoupon());
+                this.nodes.addButton.addEventListener("click", () => this.addCoupon());
+                this.nodes.toggleListButton.addEventListener("click", () => this.toggleListView());
+                this.nodes.couponList.addEventListener("click", (e) => this.handleListClick(e));
+
+                this.nodes.searchInput.addEventListener("keyup", e => e.key === 'Enter' && this.searchCoupon());
+                this.nodes.addInput.addEventListener("keyup", e => e.key === 'Enter' && this.addCoupon());
+            },
+
+            toggleLoading(button, isLoading) {
+                if (isLoading) {
+                    button.classList.add('loading');
+                    button.disabled = true;
+                } else {
+                    button.classList.remove('loading');
+                    button.disabled = false;
+                }
+            },
+
+            async fetchJson(url, options) {
+                const res = await fetch(url, options);
+                const text = await res.text();
+
+                let data;
+                try {
+                    data = text ? JSON.parse(text) : null;
+                } catch {
+                    throw new Error("서버 응답이 JSON이 아닙니다.");
+                }
+
+                if (!res.ok) {
+                    const msg = (data && (data.message || data.error)) ? (data.message || data.error) : `HTTP ${res.status}`;
+                    throw new Error(msg);
+                }
+                return data;
+            },
+
+            async loadCoupons() {
+                this.showFeedback('목록을 불러오는 중...', 'placeholder');
+                try {
+                    const data = await this.fetchJson(this.googleWebAppUrl, { method: "GET" });
+
+                    if (!Array.isArray(data)) {
+                        const msg = data?.error || data?.message || "목록 형식이 올바르지 않습니다.";
+                        throw new Error(msg);
+                    }
+
+                    this.coupons = data.map(String);
+                    this.showFeedback(`총 ${this.coupons.length}개의 번호가 저장됨`, 'placeholder');
+
+                    if (this.nodes.couponListContainer.style.display !== 'none') {
+                        this.renderList();
+                    }
+                } catch (error) {
+                    this.showFeedback(`쿠폰 목록 로딩 실패: ${error.message}`, 'not-found');
+                    console.error('Error loading coupons:', error);
+                }
+            },
+
+            async addCoupon() {
+                const numberToAdd = this.nodes.addInput.value.trim();
+                if (!numberToAdd) {
+                    this.showFeedback("추가할 번호를 입력하세요.", "not-found");
+                    return;
+                }
+
+                this.toggleLoading(this.nodes.addButton, true);
+                try {
+                    const data = await this.fetchJson(this.googleWebAppUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "add", coupon: numberToAdd })
+                    });
+
+                    // Apps Script 응답 형태에 맞춰 유연하게 처리
+                    if (data?.success === false) {
+                        this.showFeedback(`❌ ${data.message || "추가 실패"}`, "not-found");
+                        return;
+                    }
+
+                    this.nodes.addInput.value = "";
+                    this.showFeedback(`✅ '${numberToAdd}' 추가 완료. 목록을 갱신합니다...`, "found");
+
+                    // 시트 반영 딜레이 약간
+                    await new Promise(r => setTimeout(r, 500));
+                    await this.loadCoupons();
+
+                } catch (error) {
+                    this.showFeedback(`오류: ${error.message}`, "not-found");
+                } finally {
+                    this.toggleLoading(this.nodes.addButton, false);
+                }
+            },
+
+            async deleteCoupon(numberToDelete, deleteButton) {
+                this.toggleLoading(deleteButton, true);
+                try {
+                    const data = await this.fetchJson(this.googleWebAppUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "delete", coupon: numberToDelete })
+                    });
+
+                    if (data?.success === false) {
+                        this.showFeedback(`❌ ${data.message || "삭제 실패"}`, "not-found");
+                        return;
+                    }
+
+                    this.showFeedback(`✅ '${numberToDelete}' 삭제 완료. 목록을 갱신합니다...`, "found");
+                    await new Promise(r => setTimeout(r, 500));
+                    await this.loadCoupons();
+
+                } catch (error) {
+                    this.showFeedback(`오류: ${error.message}`, "not-found");
+                }
+                // 목록 갱신되므로 버튼 다시 켤 필요 없음
+            },
+
+            searchCoupon() {
+                const query = this.nodes.searchInput.value.trim();
+                if (!query) {
+                    this.nodes.resultDiv.textContent = "검색할 번호를 입력해주세요.";
+                    this.nodes.resultDiv.className = "placeholder";
+                    return;
+                }
+                if (this.coupons.includes(query)) {
+                    this.nodes.resultDiv.textContent = "✅ 사용 가능한 쿠폰입니다.";
+                    this.nodes.resultDiv.className = "found";
+                } else {
+                    this.nodes.resultDiv.textContent = "❌ 없는 번호입니다.";
+                    this.nodes.resultDiv.className = "not-found";
+                }
+            },
+
+            toggleListView() {
+                const container = this.nodes.couponListContainer;
+                const button = this.nodes.toggleListButton;
+                if (container.style.display === 'none') {
+                    this.renderList();
+                    container.style.display = 'block';
+                    button.textContent = '목록 닫기';
+                } else {
+                    container.style.display = 'none';
+                    button.textContent = '전체 목록 보기';
+                }
+            },
+
+            renderList() {
+                const listNode = this.nodes.couponList;
+                listNode.innerHTML = '';
+
+                if (this.coupons.length === 0) {
+                    listNode.innerHTML = '<p class="placeholder">저장된 쿠폰이 없습니다.</p>';
+                    return;
+                }
+
+                const ul = document.createElement('ul');
+                const sortedCoupons = [...this.coupons].sort((a, b) => Number(a) - Number(b));
+
+                sortedCoupons.forEach(coupon => {
+                    const li = document.createElement('li');
+                    const numberSpan = document.createElement('span');
+                    numberSpan.textContent = coupon;
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '삭제';
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.dataset.coupon = coupon;
+
+                    li.appendChild(numberSpan);
+                    li.appendChild(deleteBtn);
+                    ul.appendChild(li);
+                });
+                listNode.appendChild(ul);
+            },
+
+            handleListClick(event) {
+                if (event.target.classList.contains('delete-btn')) {
+                    const numberToDelete = event.target.dataset.coupon;
+                    if (confirm(`'${numberToDelete}' 번호를 정말로 삭제하시겠습니까?`)) {
+                        this.deleteCoupon(numberToDelete, event.target);
+                    }
+                }
+            },
+
+            showFeedback(message, type) {
+                this.nodes.feedbackDiv.textContent = message;
+                this.nodes.feedbackDiv.className = type;
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>
