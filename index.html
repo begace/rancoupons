@@ -56,6 +56,36 @@
             border-radius: 12px;
             margin-bottom: 15px;
         }
+
+        /* 검색 입력칸 + X 버튼 래퍼 */
+        .input-wrap {
+            position: relative;
+            margin-bottom: 15px; /* 기존 input margin-bottom 대체 */
+        }
+        .input-wrap input[type="tel"] {
+            margin-bottom: 0;        /* 래퍼가 margin 담당 */
+            padding-right: 56px;     /* X 버튼 공간 확보 */
+        }
+        .clear-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 999px;
+            background: #e9ecef;
+            color: #333;
+            font-size: 26px;
+            line-height: 36px;
+            cursor: pointer;
+            display: none; /* 기본 숨김 */
+        }
+        .clear-btn:active {
+            transform: translateY(-50%) scale(0.96);
+        }
+
         .btn {
             width: 100%;
             padding: 18px;
@@ -186,7 +216,14 @@
 <body>
     <div class="container">
         <h1>쿠폰 번호 관리</h1>
-        <input type="tel" id="searchInput" placeholder="검색할 숫자 입력" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+
+        <!-- 검색 입력 + X 버튼 -->
+        <div class="input-wrap">
+            <input type="tel" id="searchInput" placeholder="검색할 숫자 입력"
+                   oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+            <button type="button" id="clearSearch" class="clear-btn" aria-label="입력 지우기">×</button>
+        </div>
+
         <button id="searchButton" class="btn">검색</button>
         <div id="result" class="placeholder">검색할 번호를 입력해주세요.</div>
 
@@ -207,13 +244,15 @@
     <script>
         const App = {
             // Netlify Functions 프록시 엔드포인트
-            // (netlify/functions/coupons.js 가 배포되어 있어야 합니다)
             googleWebAppUrl: "/.netlify/functions/coupons",
 
             coupons: [],
 
             nodes: {
                 searchInput: document.getElementById("searchInput"),
+                clearSearch: document.getElementById("clearSearch"),
+                searchButton: document.getElementById("searchButton"),
+
                 resultDiv: document.getElementById("result"),
                 addInput: document.getElementById("addInput"),
                 addButton: document.getElementById("addButton"),
@@ -225,17 +264,34 @@
 
             async init() {
                 this.bindEvents();
+                this.syncSearchUi();     // 초기 UI (입력 없으면 버튼 숨김)
                 await this.loadCoupons();
             },
 
             bindEvents() {
-                document.getElementById("searchButton").addEventListener("click", () => this.searchCoupon());
+                this.nodes.searchButton.addEventListener("click", () => this.searchCoupon());
                 this.nodes.addButton.addEventListener("click", () => this.addCoupon());
                 this.nodes.toggleListButton.addEventListener("click", () => this.toggleListView());
                 this.nodes.couponList.addEventListener("click", (e) => this.handleListClick(e));
 
                 this.nodes.searchInput.addEventListener("keyup", e => e.key === 'Enter' && this.searchCoupon());
                 this.nodes.addInput.addEventListener("keyup", e => e.key === 'Enter' && this.addCoupon());
+
+                this.nodes.searchInput.addEventListener("input", () => this.syncSearchUi());
+
+                this.nodes.clearSearch.addEventListener("click", () => {
+                    this.nodes.searchInput.value = "";
+                    this.nodes.searchInput.focus();
+                    this.nodes.resultDiv.textContent = "검색할 번호를 입력해주세요.";
+                    this.nodes.resultDiv.className = "placeholder";
+                    this.syncSearchUi();
+                });
+            },
+
+            // 검색 입력칸 UI 동기화: 입력 있으면 X/검색버튼 보이게, 없으면 숨김
+            syncSearchUi() {
+                const hasValue = this.nodes.searchInput.value.trim().length > 0;
+                this.nodes.clearSearch.style.display = hasValue ? "block" : "none";
             },
 
             toggleLoading(button, isLoading) {
@@ -303,7 +359,6 @@
                         body: JSON.stringify({ action: "add", coupon: numberToAdd })
                     });
 
-                    // Apps Script 응답 형태에 맞춰 유연하게 처리
                     if (data?.success === false) {
                         this.showFeedback(`❌ ${data.message || "추가 실패"}`, "not-found");
                         return;
@@ -312,7 +367,6 @@
                     this.nodes.addInput.value = "";
                     this.showFeedback(`✅ '${numberToAdd}' 추가 완료. 목록을 갱신합니다...`, "found");
 
-                    // 시트 반영 딜레이 약간
                     await new Promise(r => setTimeout(r, 500));
                     await this.loadCoupons();
 
@@ -344,7 +398,6 @@
                 } catch (error) {
                     this.showFeedback(`오류: ${error.message}`, "not-found");
                 }
-                // 목록 갱신되므로 버튼 다시 켤 필요 없음
             },
 
             searchCoupon() {
@@ -352,8 +405,10 @@
                 if (!query) {
                     this.nodes.resultDiv.textContent = "검색할 번호를 입력해주세요.";
                     this.nodes.resultDiv.className = "placeholder";
+                    this.syncSearchUi();
                     return;
                 }
+
                 if (this.coupons.includes(query)) {
                     this.nodes.resultDiv.textContent = "✅ 사용 가능한 쿠폰입니다.";
                     this.nodes.resultDiv.className = "found";
