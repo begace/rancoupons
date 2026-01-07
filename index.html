@@ -402,6 +402,7 @@
 
             searchCoupon() {
                 const query = this.nodes.searchInput.value.trim();
+
                 if (!query) {
                     this.nodes.resultDiv.textContent = "검색할 번호를 입력해주세요.";
                     this.nodes.resultDiv.className = "placeholder";
@@ -409,13 +410,22 @@
                     return;
                 }
 
-                if (this.coupons.includes(query)) {
-                    this.nodes.resultDiv.textContent = "✅ 사용 가능한 쿠폰입니다.";
+                const exists = this.coupons.includes(query);
+
+                if (exists) {
+                    // 예: [33 O 사용 가능한 쿠폰입니다]
+                    this.nodes.resultDiv.textContent = `[${query} O 사용 가능한 쿠폰입니다]`;
                     this.nodes.resultDiv.className = "found";
                 } else {
-                    this.nodes.resultDiv.textContent = "❌ 없는 번호입니다.";
+                    // 예: [33 X 없는 번호입니다]
+                    this.nodes.resultDiv.textContent = `[${query} X 없는 번호입니다]`;
                     this.nodes.resultDiv.className = "not-found";
                 }
+
+                // ✅ 검색 후 입력칸 비우기 + X 버튼 숨김
+                this.nodes.searchInput.value = "";
+                this.syncSearchUi();
+                this.nodes.searchInput.focus();
             },
 
             toggleListView() {
