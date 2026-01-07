@@ -219,6 +219,45 @@
             text-align: left;
             word-break: break-all;
         }
+
+        /* ===== 전체 화면 로딩 오버레이 ===== */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            display: none;            /* JS로 flex로 켬 */
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .overlay-card {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 22px 26px;
+            min-width: 220px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .overlay-text {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+        }
+        .overlay-spinner {
+            width: 34px;
+            height: 34px;
+            border: 4px solid #d9d9d9;
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: overlaySpin 0.9s linear infinite;
+        }
+        @keyframes overlaySpin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -250,6 +289,14 @@
         </details>
     </div>
 
+    <!-- 전체 화면 로딩 오버레이 -->
+    <div id="loadingOverlay" class="overlay" style="display:none;" aria-hidden="true">
+        <div class="overlay-card" role="status" aria-live="polite">
+            <div class="overlay-spinner" aria-hidden="true"></div>
+            <div id="loadingText" class="overlay-text">로딩중...</div>
+        </div>
+    </div>
+
     <script>
         const App = {
             // Netlify Functions 프록시 엔드포인트
@@ -259,17 +306,6 @@
             searchHistory: [],
             maxHistory: 30,
 
-            addSearchHistory(query) {
-            this.searchHistory.push(String(query));
-            if (this.searchHistory.length > this.maxHistory) {
-                    this.searchHistory.shift();
-                }
-                this.renderSearchHistory();
-            },
-
-            renderSearchHistory() {
-                this.nodes.searchLog.textContent = this.searchHistory.map(n => `[${n}]`).join('');
-            },
             nodes: {
                 searchInput: document.getElementById("searchInput"),
                 clearSearch: document.getElementById("clearSearch"),
@@ -282,12 +318,15 @@
                 feedbackDiv: document.getElementById("feedback"),
                 couponListContainer: document.getElementById("couponListContainer"),
                 couponList: document.getElementById("couponList"),
-                toggleListButton: document.getElementById("toggleListButton")
+                toggleListButton: document.getElementById("toggleListButton"),
+
+                loadingOverlay: document.getElementById("loadingOverlay"),
+                loadingText: document.getElementById("loadingText"),
             },
 
             async init() {
                 this.bindEvents();
-                this.syncSearchUi();     // 초기 UI (입력 없으면 버튼 숨김)
+                this.syncSearchUi();
                 await this.loadCoupons();
             },
 
@@ -311,10 +350,33 @@
                 });
             },
 
-            // 검색 입력칸 UI 동기화: 입력 있으면 X/검색버튼 보이게, 없으면 숨김
+            // 검색 입력칸 UI 동기화: 입력 있으면 X 보이게, 없으면 숨김
             syncSearchUi() {
                 const hasValue = this.nodes.searchInput.value.trim().length > 0;
                 this.nodes.clearSearch.style.display = hasValue ? "block" : "none";
+            },
+
+            addSearchHistory(query) {
+                this.searchHistory.push(String(query));
+                if (this.searchHistory.length > this.maxHistory) {
+                    this.searchHistory.shift();
+                }
+                this.renderSearchHistory();
+            },
+
+            renderSearchHistory() {
+                this.nodes.searchLog.textContent = this.searchHistory.map(n => `[${n}]`).join('');
+            },
+
+            showLoadingOverlay(message = "로딩중...") {
+                this.nodes.loadingText.textContent = message;
+                this.nodes.loadingOverlay.style.display = "flex";
+                this.nodes.loadingOverlay.setAttribute("aria-hidden", "false");
+            },
+
+            hideLoadingOverlay() {
+                this.nodes.loadingOverlay.style.display = "none";
+                this.nodes.loadingOverlay.setAttribute("aria-hidden", "true");
             },
 
             toggleLoading(button, isLoading) {
@@ -346,7 +408,10 @@
             },
 
             async loadCoupons() {
+                // ✅ 쿠폰 관리 열지 않아도 로딩 상태가 보이도록 전체 화면 오버레이
+                this.showLoadingOverlay("로딩중...");
                 this.showFeedback('목록을 불러오는 중...', 'placeholder');
+
                 try {
                     const data = await this.fetchJson(this.googleWebAppUrl, { method: "GET" });
 
@@ -364,6 +429,9 @@
                 } catch (error) {
                     this.showFeedback(`쿠폰 목록 로딩 실패: ${error.message}`, 'not-found');
                     console.error('Error loading coupons:', error);
+                } finally {
+                    // ✅ 로딩 끝나면 오버레이 제거
+                    this.hideLoadingOverlay();
                 }
             },
 
@@ -443,7 +511,7 @@
                     this.nodes.resultDiv.className = "not-found";
                 }
 
-                // ✅ 로그 추가 (결과 아래에 [12][13]... 형태)
+                // ✅ 로그 추가
                 this.addSearchHistory(query);
 
                 // ✅ 검색 후 입력칸 비우기 + X 숨김
