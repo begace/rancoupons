@@ -60,11 +60,11 @@
         /* 검색 입력칸 + X 버튼 래퍼 */
         .input-wrap {
             position: relative;
-            margin-bottom: 15px; /* 기존 input margin-bottom 대체 */
+            margin-bottom: 15px;
         }
         .input-wrap input[type="tel"] {
-            margin-bottom: 0;        /* 래퍼가 margin 담당 */
-            padding-right: 56px;     /* X 버튼 공간 확보 */
+            margin-bottom: 0;
+            padding-right: 56px;
         }
         .clear-btn {
             position: absolute;
@@ -80,7 +80,7 @@
             font-size: 26px;
             line-height: 36px;
             cursor: pointer;
-            display: none; /* 기본 숨김 */
+            display: none;
         }
         .clear-btn:active {
             transform: translateY(-50%) scale(0.96);
@@ -211,21 +211,33 @@
             font-weight: bold;
             cursor: pointer;
         }
+
+        /* Search Log */
         .search-log {
             margin-top: 10px;
-            font-size: 18px;
-            color: var(--dark-gray);
             min-height: 24px;
             text-align: left;
             word-break: break-all;
         }
+        .search-log .chip {
+            display: inline-block;
+            padding: 6px 10px;
+            margin: 4px 6px 0 0;
+            border-radius: 10px;
+            background: #2f343a;
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+        .search-log .chip.ok { color: #2ecc71; }
+        .search-log .chip.ng { color: #ff4d4f; }
 
-        /* ===== 전체 화면 로딩 오버레이 ===== */
+        /* Full-screen loading overlay */
         .overlay {
             position: fixed;
             inset: 0;
             background: rgba(0, 0, 0, 0.35);
-            display: none;            /* JS로 flex로 켬 */
+            display: none;
             align-items: center;
             justify-content: center;
             z-index: 9999;
@@ -264,7 +276,6 @@
     <div class="container">
         <h1>쿠폰 번호 관리</h1>
 
-        <!-- 검색 입력 + X 버튼 -->
         <div class="input-wrap">
             <input type="tel" id="searchInput" placeholder="검색할 숫자 입력"
                    oninput="this.value = this.value.replace(/[^0-9]/g, '');">
@@ -299,7 +310,6 @@
 
     <script>
         const App = {
-            // Netlify Functions 프록시 엔드포인트
             googleWebAppUrl: "/.netlify/functions/coupons",
 
             coupons: [],
@@ -350,14 +360,13 @@
                 });
             },
 
-            // 검색 입력칸 UI 동기화: 입력 있으면 X 보이게, 없으면 숨김
             syncSearchUi() {
                 const hasValue = this.nodes.searchInput.value.trim().length > 0;
                 this.nodes.clearSearch.style.display = hasValue ? "block" : "none";
             },
 
-            addSearchHistory(query) {
-                this.searchHistory.push(String(query));
+            addSearchHistory(query, ok) {
+                this.searchHistory.push({ n: String(query), ok: !!ok });
                 if (this.searchHistory.length > this.maxHistory) {
                     this.searchHistory.shift();
                 }
@@ -365,7 +374,15 @@
             },
 
             renderSearchHistory() {
-                this.nodes.searchLog.textContent = this.searchHistory.map(n => `[${n}]`).join('');
+                const wrap = this.nodes.searchLog;
+                wrap.innerHTML = "";
+
+                for (const item of this.searchHistory) {
+                    const span = document.createElement("span");
+                    span.className = `chip ${item.ok ? "ok" : "ng"}`;
+                    span.textContent = `[${item.n}]`;
+                    wrap.appendChild(span);
+                }
             },
 
             showLoadingOverlay(message = "로딩중...") {
@@ -408,7 +425,6 @@
             },
 
             async loadCoupons() {
-                // ✅ 쿠폰 관리 열지 않아도 로딩 상태가 보이도록 전체 화면 오버레이
                 this.showLoadingOverlay("로딩중...");
                 this.showFeedback('목록을 불러오는 중...', 'placeholder');
 
@@ -430,7 +446,6 @@
                     this.showFeedback(`쿠폰 목록 로딩 실패: ${error.message}`, 'not-found');
                     console.error('Error loading coupons:', error);
                 } finally {
-                    // ✅ 로딩 끝나면 오버레이 제거
                     this.hideLoadingOverlay();
                 }
             },
@@ -511,10 +526,8 @@
                     this.nodes.resultDiv.className = "not-found";
                 }
 
-                // ✅ 로그 추가
-                this.addSearchHistory(query);
+                this.addSearchHistory(query, exists);
 
-                // ✅ 검색 후 입력칸 비우기 + X 숨김
                 this.nodes.searchInput.value = "";
                 this.syncSearchUi();
                 this.nodes.searchInput.focus();
